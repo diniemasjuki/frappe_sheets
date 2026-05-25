@@ -35,3 +35,154 @@ jobs:
 
       - name: Enforce bundle-size budgets
         run: npm run check:bundle-size
+
+  e2e:
+    name: Playwright E2E (real Frappe backend)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout sheets
+        uses: actions/checkout@v4
+        with:
+          path: sheets
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            mariadb-client \
+            libmariadb-dev \
+            redis-tools \
+            wkhtmltopdf
+
+      - name: Configure MariaDB for Frappe
+        run: |
+          mysql -h 127.0.0.1 -uroot -proot -e "
+            SET GLOBAL character_set_server = 'utf8mb4';
+            SET GLOBAL collation_server     = 'utf8mb4_unicode_ci';
+          "
+          echo "127.0.0.1 test_site" | sudo tee -a /etc/hosts
+
+      - name: Install frappe-bench
+        run: pip install frappe-bench
+
+      - name: Initialize bench
+        run: |
+          bench init \
+            --skip-redis-config-generation \
+            --skip-assets \
+            --python "$(which python)" \
+            --frappe-branch version-15 \
+            frappe-bench
+
+      - name: Point bench at service containers
+        working-directory: frappe-bench
+        run: |
+          bench set-config -g db_host 127.0.0.1
+          bench set-config -g redis_cache    redis://127.0.0.1:6379
+          bench set-config -g redis_queue    redis://127.0.0.1:6379
+          bench set-config -g redis_socketio redis://127.0.0.1:6379
+          # Point bench's Procfile at host-mode redis too
+          sed -i '/redis/d' ./Procfile
+
+      - name: Link local sheets app into bench
+        working-directory: frappe-bench
+        run: |
+          ln -s "$GITHUB_WORKSPACE/sheets" apps/sheets
+          ./env/bin/pip install -e apps/sheets
+
+      - name: Create test site and install app
+        working-directory: frappe-bench
+        run: |
+          bench new-site test_site \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket
+          bench --site test_site install-app sheets
+          bench --site test_site set-config developer_mode 1
+          bench --site test_site clear-cache
+          bench use test_site
+
+      - name: Build frontend assets
+        working-directory: sheets/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start bench in background
+        working-directory: frappe-bench
+        run: |
+          nohup bench start > bench.log 2>&1 &
+          echo $! > bench.pid
+          # Wait for the web server to respond
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://test_site:8000/api/method/ping; then
+              echo "Bench up after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Bench failed to start; recent log:"
+          tail -200 bench.log
+          exit 1
+
+      - name: Install Playwright browsers
+        working-directory: sheets/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: sheets/frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://test_site:8000
+          FRAPPE_ADMIN_USER: Administrator
+          FRAPPE_ADMIN_PASSWORD: admin
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: sheets/frontend/playwright-report/
+          retention-days: 7
+
+      - name: Upload bench log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-log
+          path: frappe-bench/bench.log
+          retention-days: 7

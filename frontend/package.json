@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install --with-deps chromium",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "ci": "vitest run && vite build && node scripts/check-bundle-size.mjs"
   },
@@ -23,6 +26,7 @@
     "yjs": "^13.6.30"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@vitest/coverage-v8": "^4.1.6",
     "autoprefixer": "^10.5.0",
     "postcss": "^8.5.14",

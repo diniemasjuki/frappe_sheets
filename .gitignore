@@ -58,5 +58,10 @@ jspm_packages/
 .internal/
 frappe_sheets_next/public/node_modules
 
+# Playwright
+frontend/playwright-report/
+frontend/test-results/
+frontend/e2e/.auth/
+
 # Claude Code workspace settings (per-machine, not for distribution)
 .claude/
