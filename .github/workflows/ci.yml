@@ -140,7 +140,11 @@ jobs:
           bench use test_site
 
       - name: Build frontend assets
-        working-directory: sheets/frontend
+        # `bench get-app` copies the app into frappe-bench/apps/sheets, and
+        # Frappe serves /assets/sheets/... from THAT copy — not from the
+        # original $GITHUB_WORKSPACE/sheets checkout. Build inside the bench
+        # copy so the JS/CSS bundles land where the web server can see them.
+        working-directory: frappe-bench/apps/sheets/frontend
         run: |
           npm ci
           npm run build
@@ -163,11 +167,11 @@ jobs:
           exit 1
 
       - name: Install Playwright browsers
-        working-directory: sheets/frontend
+        working-directory: frappe-bench/apps/sheets/frontend
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        working-directory: sheets/frontend
+        working-directory: frappe-bench/apps/sheets/frontend
         env:
           PLAYWRIGHT_BASE_URL: http://test_site:8000
           FRAPPE_ADMIN_USER: Administrator
@@ -179,7 +183,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: sheets/frontend/playwright-report/
+          path: frappe-bench/apps/sheets/frontend/playwright-report/
           retention-days: 7
 
       - name: Upload bench log on failure
