@@ -17,10 +17,10 @@ export default defineConfig({
     }),
   ],
 
-  base: '/assets/sheets/sheets/',
+  base: '/assets/spreadsheet/spreadsheet/',
 
   build: {
-    outDir: '../sheets/public/sheets',
+    outDir: '../spreadsheet/public/spreadsheet',
     emptyOutDir: true,
     rollupOptions: {
       output: {

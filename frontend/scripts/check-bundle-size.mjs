@@ -15,7 +15,7 @@ import { resolve, dirname, join }  from 'node:path'
 import { fileURLToPath }            from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const DIST = resolve(__dirname, '../../sheets/public/sheets')
+const DIST = resolve(__dirname, '../../spreadsheet/public/spreadsheet')
 
 // Budgets in KB (1024 bytes). `raw` = on-disk minified size; `gzip` = wire
 // size when served with gzip compression — both matter (parse cost vs.

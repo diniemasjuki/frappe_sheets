@@ -64,10 +64,10 @@ jobs:
           --health-retries=5
 
     steps:
-      - name: Checkout sheets
+      - name: Checkout spreadsheet
         uses: actions/checkout@v4
         with:
-          path: sheets
+          path: spreadsheet
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -118,14 +118,14 @@ jobs:
           # Point bench's Procfile at host-mode redis too
           sed -i '/redis/d' ./Procfile
 
-      - name: Add local sheets app to bench
+      - name: Add local spreadsheet app to bench
         working-directory: frappe-bench
         # `bench get-app` handles the three things a manual symlink misses:
         # registering the app in sites/apps.txt, installing it into the
         # bench's venv, and resolving its hooks. Pointing it at the local
         # checkout (rather than a git URL) makes it test exactly what's
         # in this commit.
-        run: bench get-app sheets "$GITHUB_WORKSPACE/sheets" --skip-assets
+        run: bench get-app spreadsheet "$GITHUB_WORKSPACE/spreadsheet" --skip-assets
 
       - name: Create test site and install app
         working-directory: frappe-bench
@@ -134,17 +134,17 @@ jobs:
             --mariadb-root-password root \
             --admin-password admin \
             --mariadb-user-host-login-scope='%'
-          bench --site test_site install-app sheets
+          bench --site test_site install-app spreadsheet
           bench --site test_site set-config developer_mode 1
           bench --site test_site clear-cache
           bench use test_site
 
       - name: Build frontend assets
-        # `bench get-app` copies the app into frappe-bench/apps/sheets, and
-        # Frappe serves /assets/sheets/... from THAT copy — not from the
-        # original $GITHUB_WORKSPACE/sheets checkout. Build inside the bench
+        # `bench get-app` copies the app into frappe-bench/apps/spreadsheet, and
+        # Frappe serves /assets/spreadsheet/... from THAT copy — not from the
+        # original $GITHUB_WORKSPACE/spreadsheet checkout. Build inside the bench
         # copy so the JS/CSS bundles land where the web server can see them.
-        working-directory: frappe-bench/apps/sheets/frontend
+        working-directory: frappe-bench/apps/spreadsheet/frontend
         run: |
           npm ci
           npm run build
@@ -156,7 +156,7 @@ jobs:
         # both skip creating it, so without this step the JS bundle 404s and
         # #root never mounts.
         working-directory: frappe-bench
-        run: bench build --app sheets
+        run: bench build --app spreadsheet
 
       - name: Start bench in background
         working-directory: frappe-bench
@@ -176,11 +176,11 @@ jobs:
           exit 1
 
       - name: Install Playwright browsers
-        working-directory: frappe-bench/apps/sheets/frontend
+        working-directory: frappe-bench/apps/spreadsheet/frontend
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        working-directory: frappe-bench/apps/sheets/frontend
+        working-directory: frappe-bench/apps/spreadsheet/frontend
         env:
           PLAYWRIGHT_BASE_URL: http://test_site:8000
           FRAPPE_ADMIN_USER: Administrator
@@ -192,7 +192,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: frappe-bench/apps/sheets/frontend/playwright-report/
+          path: frappe-bench/apps/spreadsheet/frontend/playwright-report/
           retention-days: 7
 
       - name: Upload Playwright test-results (traces, screenshots, videos)
@@ -200,7 +200,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-test-results
-          path: frappe-bench/apps/sheets/frontend/test-results/
+          path: frappe-bench/apps/spreadsheet/frontend/test-results/
           retention-days: 7
 
       - name: Upload bench log on failure
