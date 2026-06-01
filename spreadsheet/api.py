@@ -190,10 +190,14 @@ def unshare_sheet(name: str, user: str = "", everyone: int = 0) -> dict:
 
 @frappe.whitelist()
 def list_sheets() -> list:
+	# No explicit owner filter — Frappe's get_list already applies the
+	# permission query, so this returns sheets the session user owns plus
+	# those reaching them via DocShare (per-user or everyone=1). The
+	# `owner` field is included so the UI can mark non-owned rows as
+	# "Shared with you".
 	return frappe.get_list(
 		"Sheet",
 		fields=["name", "title", "modified", "owner"],
-		filters={"owner": frappe.session.user},
 		order_by="modified desc",
 		limit=100,
 	)
