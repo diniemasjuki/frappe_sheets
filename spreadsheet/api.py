@@ -194,13 +194,19 @@ def list_sheets() -> list:
 	# permission query, so this returns sheets the session user owns plus
 	# those reaching them via DocShare (per-user or everyone=1). The
 	# `owner` field is included so the UI can mark non-owned rows as
-	# "Shared with you".
-	return frappe.get_list(
+	# "Shared with you", and `is_owner` is computed here because the SPA
+	# template doesn't inject window.frappe.session — the client has no
+	# reliable way to know who it is.
+	me = frappe.session.user
+	rows = frappe.get_list(
 		"Sheet",
 		fields=["name", "title", "modified", "owner"],
 		order_by="modified desc",
 		limit=100,
 	)
+	for r in rows:
+		r["is_owner"] = (r["owner"] == me)
+	return rows
 
 
 @frappe.whitelist()
