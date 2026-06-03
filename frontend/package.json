@@ -20,10 +20,12 @@
     "@vitejs/plugin-vue": "^6.0.6",
     "chart.js": "^4.5.1",
     "echarts": "^6.1.0",
-    "frappe-ui": "^0.1.278",
+    "frappe-ui": "^1.0.0-beta.3",
     "vue": "^3.5.34",
     "vue-echarts": "^8.0.1",
+    "vue-router": "4",
     "xlsx": "^0.18.5",
+    "y-protocols": "^1.0.7",
     "yjs": "^13.6.30"
   },
   "devDependencies": {
