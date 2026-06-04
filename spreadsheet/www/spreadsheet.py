@@ -29,3 +29,10 @@ def get_context(context):
     context.collab_v2     = bool(frappe.conf.get("collab_v2") or False)
     context.collab_ws_url = frappe.conf.get("collab_ws_url") or None
     context.session_sid   = getattr(frappe.session, "sid", "") or ""
+
+    # Sitename + socketio_port let the SPA stand up its own `frappe.realtime`
+    # against the site's socket.io namespace. Without these, the legacy
+    # presence path silently has no transport on the public www page and
+    # the avatar pile stays empty even with concurrent users on the sheet.
+    context.sitename       = frappe.local.site
+    context.socketio_port  = frappe.conf.get("socketio_port") or 9000
