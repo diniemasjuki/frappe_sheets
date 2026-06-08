@@ -167,8 +167,81 @@ def share_sheet(name: str, user: str = "", write: int = 0, everyone: int = 0) ->
 		frappe.throw(f"User {user} not found")
 	if not enabled:
 		frappe.throw(f"User {user} is disabled")
-	frappe.share.add("Sheet", name, user, write=int(write), share=0, notify=True)
+	# Pass notify=False to Frappe's generic share path — the default
+	# notification renders as "Asif shared a document Sheet 'Title' with
+	# you" and the click destination is the Desk doctype form, not our
+	# SPA. We dispatch our own branded notification below.
+	frappe.share.add("Sheet", name, user, write=int(write), share=0, notify=False)
+	_notify_sheet_shared(name, user, can_edit=bool(int(write)))
 	return {"status": "ok"}
+
+
+def _notify_sheet_shared(sheet_name: str, recipient: str, can_edit: bool) -> None:
+	"""Send the recipient a branded share notification.
+
+	Two surfaces:
+
+	  * **In-app notification** (Notification Log) — shows in the bell
+	    icon. Subject is plain text; clicking lands on /spreadsheet?id=…
+	    instead of /app/sheet/<hash> (the Desk form view of the doctype,
+	    which is a raw JSON blob).
+	  * **Email** — only if the site has SMTP configured. `now=False`
+	    enqueues it so the share API stays fast and a flaky mailer
+	    doesn't break the user's flow. The email body links to the SPA
+	    URL using `frappe.utils.get_url` so it works in dev (localhost)
+	    and prod (https) without us hard-coding anything.
+
+	Anything that throws below is swallowed: a notification failure must
+	not roll back the DocShare row — the access grant has already
+	committed and the recipient now has access, the email is sugar.
+	"""
+	try:
+		share_doc = frappe.get_doc("Sheet", sheet_name)
+		title = share_doc.title or "Untitled Spreadsheet"
+		sharer = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
+		role = "edit" if can_edit else "view"
+		# Link points at the SPA, not the Desk. `get_url` respects the
+		# site's `host_name`, so this works behind reverse proxies too.
+		link = f"{frappe.utils.get_url()}/spreadsheet?id={sheet_name}"
+		subject = f"{sharer} shared a spreadsheet with you"
+		# Frappe's Notification Log surfaces in the bell-icon dropdown.
+		frappe.get_doc({
+			"doctype": "Notification Log",
+			"subject": (
+				f"{frappe.utils.escape_html(sharer)} shared the spreadsheet "
+				f"<b>{frappe.utils.escape_html(title)}</b> with you "
+				f"(can {role})"
+			),
+			"for_user": recipient,
+			"type": "Share",
+			"document_type": "Sheet",
+			"document_name": sheet_name,
+			"from_user": frappe.session.user,
+			"email_content": (
+				f"<p>{frappe.utils.escape_html(sharer)} shared the spreadsheet "
+				f"<b>{frappe.utils.escape_html(title)}</b> with you. "
+				f"You can {role} it.</p>"
+				f"<p><a href='{link}'>Open spreadsheet</a></p>"
+			),
+		}).insert(ignore_permissions=True)
+		# Best-effort email — silently skipped if the site has no mailer.
+		frappe.sendmail(
+			recipients=[recipient],
+			subject=subject,
+			message=(
+				f"<p>{frappe.utils.escape_html(sharer)} shared the spreadsheet "
+				f"<b>{frappe.utils.escape_html(title)}</b> with you. "
+				f"You can {role} it.</p>"
+				f"<p><a href='{link}'>Open the spreadsheet</a></p>"
+			),
+			reference_doctype="Sheet",
+			reference_name=sheet_name,
+			now=False,
+		)
+	except Exception:
+		# Don't let notification failures roll back the share — the
+		# DocShare has already committed and the access grant stands.
+		frappe.log_error(title="Sheet share notification failed")
 
 
 @frappe.whitelist()
