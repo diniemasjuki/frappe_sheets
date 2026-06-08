@@ -7,6 +7,10 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.js'],
+    // Per-file environment overrides — Vue component tests opt into
+    // happy-dom via a `// @vitest-environment happy-dom` header.
+    // Default stays `node` so the existing 950+ engine/unit tests
+    // don't pay the cost of standing up a DOM on every run.
   },
   plugins: [
     vue(),
