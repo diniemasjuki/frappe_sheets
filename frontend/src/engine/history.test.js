@@ -168,3 +168,64 @@ describe('history — op-based entries', () => {
     expect(h.canRedo()).toBe(false)
   })
 })
+
+// A snapshot mutation taken right after an op (e.g. type a value, then bold
+// it) leaves the stack as [snap0, op, snap]. Undoing the snapshot must land
+// the engine in the op's post-state — the previous code did nothing here, so
+// the snapshot mutation could never be undone. These tests drive a tiny
+// stateful engine so they assert real reconstructed state, not just which
+// callback fired.
+describe('history — snapshot-undo that lands on an op entry', () => {
+  // Engine: { val, fmt }. snapshot/restore round-trip the whole thing; ops
+  // carry a partial {before, after} patch (like the real cell-edit ops).
+  function harness() {
+    let state = { val: '', fmt: null }
+    const h = createHistory({
+      snapshot: () => ({ ...state }),
+      restore:  (snap) => { state = { ...snap } },
+      applyOp:  (op) => { state = { ...state, ...op.after } },
+      revertOp: (op) => { state = { ...state, ...op.before } },
+    })
+    return { h, get: () => state, edit: (s) => { state = { ...state, ...s } } }
+  }
+
+  it('first undo reverts the snapshot mutation, not the earlier op', () => {
+    const { h, get, edit } = harness()
+    h.init()                                              // snap0: { val:'', fmt:null }
+    edit({ val: '1' }); h.pushOp({ before: { val: '' }, after: { val: '1' } })
+    edit({ fmt: 'bold' }); h.push()                       // snap2: { val:'1', fmt:'bold' }
+
+    expect(h.undo()).toBe(true)
+    expect(get()).toEqual({ val: '1', fmt: null })        // bold removed, value kept
+    expect(h.undo()).toBe(true)
+    expect(get()).toEqual({ val: '', fmt: null })         // value removed
+    expect(h.canUndo()).toBe(false)
+  })
+
+  it('redo replays op then snapshot back to the final state', () => {
+    const { h, get, edit } = harness()
+    h.init()
+    edit({ val: '1' }); h.pushOp({ before: { val: '' }, after: { val: '1' } })
+    edit({ fmt: 'bold' }); h.push()
+    h.undo(); h.undo()                                    // back to blank
+
+    expect(h.redo()).toBe(true)
+    expect(get()).toEqual({ val: '1', fmt: null })        // op replayed
+    expect(h.redo()).toBe(true)
+    expect(get()).toEqual({ val: '1', fmt: 'bold' })      // snapshot replayed
+    expect(h.canRedo()).toBe(false)
+  })
+
+  it('reconstructs across several ops between snapshots', () => {
+    const { h, get, edit } = harness()
+    h.init()                                              // snap0
+    edit({ val: 'a' }); h.pushOp({ before: { val: '' }, after: { val: 'a' } })
+    edit({ val: 'ab' }); h.pushOp({ before: { val: 'a' }, after: { val: 'ab' } })
+    edit({ fmt: 'italic' }); h.push()                     // snap: { val:'ab', fmt:'italic' }
+
+    h.undo()                                              // undo the snapshot
+    expect(get()).toEqual({ val: 'ab', fmt: null })       // rebuilt: snap0 + 2 ops
+    h.undo()
+    expect(get()).toEqual({ val: 'a', fmt: null })
+  })
+})

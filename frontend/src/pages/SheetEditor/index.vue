@@ -2873,6 +2873,30 @@ function _captureValidationRange(rect, sheetName) {
 	return out
 }
 
+// Every cell a paste can touch — used so the paste's before/after capture
+// (and thus undo) covers all of it:
+//   1. the destination selection (tiled pastes fill exactly this),
+//   2. the paste's output rect — anchor + buffer dimensions — so a single-cell
+//      selection still records the whole pasted block, and
+//   3. for a cut, the source range the paste vacates; its cells are cleared,
+//      and any outside the destination would otherwise be lost on undo.
+// Returns an array of rects; callers merge per-cell captures across them.
+// Must be called BEFORE clipboard.paste(), which consumes the cut buffer.
+function _pasteAffectedRects(destSel) {
+	const rects = destSel ? [destSel] : []
+	const src = clipboard.getSourceSel()
+	if (src) {
+		const anch = parseCellId(activeCell.value)
+		if (anch) rects.push({
+			r0: anch.row, c0: anch.col,
+			r1: anch.row + (src.r1 - src.r0),
+			c1: anch.col + (src.c1 - src.c0),
+		})
+		if (clipboard.getMode() === 'cut') rects.push(src)
+	}
+	return rects
+}
+
 // Diff two id→value maps, returning the ids whose value changed.  Used to
 // trim noisy before/after pairs down to the cells that actually moved.
 function _diffRefs(before, after) {
@@ -3172,9 +3196,12 @@ function onDocPaste(e) {
   // the paste also added a cond-format rule, the rule list isn't part of
   // the op and we'd lose it on undo — fall back to a full snapshot in
   // that rarer case.
-  const before     = _captureRange(destSel, sn)
-  const beforeFmt  = _captureFormatsRange(destSel, sn)
-  const beforeVal  = _captureValidationRange(destSel, sn)
+  // Capture across everything the paste can touch (dest, full output block,
+  // and — for a cut — the vacated source) so undo restores all of it.
+  const rects      = _pasteAffectedRects(destSel)
+  const before     = Object.assign({}, ...rects.map(r => _captureRange(r, sn)))
+  const beforeFmt  = Object.assign({}, ...rects.map(r => _captureFormatsRange(r, sn)))
+  const beforeVal  = Object.assign({}, ...rects.map(r => _captureValidationRange(r, sn)))
   const cfBefore   = condFormat?.getRules?.(sn)?.length ?? 0
 
   let pasted = false
@@ -3193,14 +3220,14 @@ function onDocPaste(e) {
   clipboardHas.value = clipboard.hasData()
   grid.setMarchingAnts(null)
   if (pasted) {
-    // Refresh display strings for the dest range — the engine already
+    // Refresh display strings for every touched rect — the engine already
     // notified for cell-value changes, but format changes happened AFTER
     // batchSetCells so the canvas painted those cells with the old
-    // format. One pass over the rect catches up.
-    _refreshDisplayForRange(destSel, sn)
-    const after    = _captureRange(destSel, sn)
-    const afterFmt = _captureFormatsRange(destSel, sn)
-    const afterVal = _captureValidationRange(destSel, sn)
+    // format, and a cut's vacated source needs to repaint as empty.
+    for (const r of rects) _refreshDisplayForRange(r, sn)
+    const after    = Object.assign({}, ...rects.map(r => _captureRange(r, sn)))
+    const afterFmt = Object.assign({}, ...rects.map(r => _captureFormatsRange(r, sn)))
+    const afterVal = Object.assign({}, ...rects.map(r => _captureValidationRange(r, sn)))
     const cfAfter  = condFormat?.getRules?.(sn)?.length ?? 0
     const refs     = _diffRefs(before, after)
     if (refs.length || cfBefore !== cfAfter) {
@@ -3226,17 +3253,18 @@ function doPasteSpecial(kind) {
   if (!clipboard.hasData()) return
   const destSel = grid.getSelection()
   const sn = sheet.getCurrentSheet()
-  const before     = _captureRange(destSel, sn)
-  const beforeFmt  = _captureFormatsRange(destSel, sn)
-  const beforeVal  = _captureValidationRange(destSel, sn)
+  const rects      = _pasteAffectedRects(destSel)
+  const before     = Object.assign({}, ...rects.map(r => _captureRange(r, sn)))
+  const beforeFmt  = Object.assign({}, ...rects.map(r => _captureFormatsRange(r, sn)))
+  const beforeVal  = Object.assign({}, ...rects.map(r => _captureValidationRange(r, sn)))
   const cfBefore   = condFormat?.getRules?.(sn)?.length ?? 0
   clipboard.paste(activeCell.value, () => {}, kind, destSel)
-  _refreshDisplayForRange(destSel, sn)
+  for (const r of rects) _refreshDisplayForRange(r, sn)
   clipboardHas.value = clipboard.hasData()
   grid?.setMarchingAnts(null)
-  const after    = _captureRange(destSel, sn)
-  const afterFmt = _captureFormatsRange(destSel, sn)
-  const afterVal = _captureValidationRange(destSel, sn)
+  const after    = Object.assign({}, ...rects.map(r => _captureRange(r, sn)))
+  const afterFmt = Object.assign({}, ...rects.map(r => _captureFormatsRange(r, sn)))
+  const afterVal = Object.assign({}, ...rects.map(r => _captureValidationRange(r, sn)))
   const cfAfter  = condFormat?.getRules?.(sn)?.length ?? 0
   const refs     = _diffRefs(before, after)
   if (refs.length || cfBefore !== cfAfter) {
@@ -3406,6 +3434,7 @@ function saveComment() {
   commentPanel.open = false
   notesPanel.rev++
   grid?.render()
+  history.push()   // comments live in the snapshot; record so undo can revert
   isDirty.value = true
 }
 
@@ -3414,6 +3443,7 @@ function deleteComment() {
   commentPanel.open = false
   notesPanel.rev++
   grid?.render()
+  history.push()
   isDirty.value = true
 }
 
@@ -3513,6 +3543,7 @@ function confirmValidation() {
   for (const id of ids) validation.set(id, rule, sn)
   validationDialog.open = false
   grid?.render()
+  history.push()   // validation rules live in the snapshot; record for undo
   isDirty.value = true
 }
 
@@ -3522,6 +3553,7 @@ function removeValidation() {
   for (const id of ids) validation.clear(id, sn)
   validationDialog.open = false
   grid?.render()
+  history.push()
   isDirty.value = true
 }
 
