@@ -253,17 +253,17 @@ function _flashError(msg) {
   setTimeout(() => { if (errorMessage.value === msg) errorMessage.value = '' }, 4000)
 }
 
-// Persisted view preference. Default to grid because the previews are the
-// existing visual identity of the page; users who want density opt in.
+// Persisted view preference. Default to list for a dense, scannable
+// listing; users who prefer the card previews opt into grid.
 const VIEW_KEY = 'frappe_sheets:home_view_mode'
 const viewMode = ref(_readViewMode())
 
 function _readViewMode() {
   try {
     const v = localStorage.getItem(VIEW_KEY)
-    return v === 'list' || v === 'grid' ? v : 'grid'
+    return v === 'list' || v === 'grid' ? v : 'list'
   } catch (_) {
-    return 'grid'
+    return 'list'
   }
 }
 
