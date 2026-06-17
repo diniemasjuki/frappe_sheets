@@ -924,8 +924,15 @@
     <div v-if="dropdownPanel.open" class="sn-dropdown-panel"
          :style="{ left: dropdownPanel.x + 'px', top: dropdownPanel.y + 'px', minWidth: dropdownPanel.w + 'px' }">
       <div v-for="opt in dropdownPanel.options" :key="opt"
-           class="sn-dropdown-opt" @mousedown.prevent="pickDropdownOption(opt)">
-        {{ opt }}
+           class="sn-dropdown-opt" :class="{ 'is-active': opt === dropdownPanel.value }"
+           @mousedown.prevent="pickDropdownOption(opt)">
+        <FeatherIcon name="check" class="sn-dropdown-check" :style="{ visibility: opt === dropdownPanel.value ? 'visible' : 'hidden' }" />
+        <span class="sn-dropdown-chip" :style="{ background: chipColor(opt) }">{{ opt }}</span>
+      </div>
+      <div v-if="dropdownPanel.value" class="sn-dropdown-opt sn-dropdown-clear"
+           @mousedown.prevent="pickDropdownOption('')">
+        <FeatherIcon name="x" class="sn-dropdown-check" />
+        <span class="sn-dropdown-label">Clear</span>
       </div>
     </div>
 
@@ -1050,6 +1057,7 @@ import { createClipboard }     from '../../engine/clipboard.js'
 import { createSortFilter }    from '../../engine/sortFilter.js'
 import { createCommentsEngine }  from '../../engine/comments.js'
 import { createValidationEngine } from '../../engine/validation.js'
+import { chipColor } from '../../canvas/chip-geometry.js'
 import { createCondFormatEngine } from '../../engine/cond-format.js'
 import { useToolbar }          from './useToolbar.js'
 import { usePersistence }      from './usePersistence.js'
@@ -1428,7 +1436,7 @@ const commentPanel  = reactive({ open: false, id: '', text: '', x: 0, y: 0 })
 const notesPanel = reactive({ open: false, rev: 0 })
 
 // ── Dropdown (validation) UI state ────────────────────────────────────────────
-const dropdownPanel    = reactive({ open: false, id: '', options: [], x: 0, y: 0, w: 120 })
+const dropdownPanel    = reactive({ open: false, id: '', options: [], value: '', x: 0, y: 0, w: 120 })
 const validationDialog = reactive({
   open: false,
   type:     'list',      // 'list' | 'number' | 'text_length'
@@ -3561,6 +3569,7 @@ function openDropdown(id, rule, pos = {}) {
   if (rule?.type !== 'list') return
   dropdownPanel.id      = id
   dropdownPanel.options = rule.options
+  dropdownPanel.value   = String(sheet.getCell(id, sheet.getCurrentSheet()) ?? '')
   dropdownPanel.x       = pos.x ?? 0
   dropdownPanel.y       = pos.y ?? 0
   dropdownPanel.w       = pos.w ?? 120
@@ -3574,6 +3583,7 @@ function pickDropdownOption(opt) {
   sheet.setCell(id, opt)
   dropdownPanel.open = false
   _pushEditOp(sn, before, 'Edit cell')
+  recomputePivotsForSheet(sn)
 }
 
 // ── Conditional formatting ────────────────────────────────────────────────────
@@ -4934,9 +4944,14 @@ function toggleShowFormulas() {
 .sn-notes-row-text    { font-size:12px; color:var(--ink-gray-6); margin-top:2px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word; }
 
 /* Validation dropdown panel */
-.sn-dropdown-panel { position:fixed; z-index:8500; background:var(--surface-modal); border:1px solid var(--outline-gray-modals); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.12); min-width:120px; max-height:200px; overflow-y:auto; }
-.sn-dropdown-opt   { padding:7px 14px; font-size:13px; color:var(--ink-gray-9); cursor:pointer; white-space:nowrap; }
+.sn-dropdown-panel { position:fixed; z-index:8500; padding:4px; background:var(--surface-modal); border:1px solid var(--outline-gray-modals); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.12); min-width:140px; max-height:240px; overflow-y:auto; }
+.sn-dropdown-opt   { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; font-size:13px; color:var(--ink-gray-9); cursor:pointer; white-space:nowrap; }
 .sn-dropdown-opt:hover { background:var(--surface-gray-2); }
+.sn-dropdown-opt.is-active { font-weight:500; }
+.sn-dropdown-check { width:14px; height:14px; flex-shrink:0; color:var(--ink-gray-7); }
+.sn-dropdown-chip  { max-width:200px; padding:2px 10px; border-radius:999px; color:var(--ink-gray-9); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sn-dropdown-clear .sn-dropdown-label { overflow:hidden; text-overflow:ellipsis; }
+.sn-dropdown-clear { color:var(--ink-gray-6); border-top:1px solid var(--outline-gray-1); border-radius:0 0 6px 6px; margin-top:2px; padding-top:8px; }
 
 /* Conditional format dialog rows */
 .sn-form-stack  { display:flex; flex-direction:column; gap:12px; }

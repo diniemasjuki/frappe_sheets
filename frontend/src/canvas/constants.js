@@ -33,4 +33,8 @@ export const COLORS = {
   // by being a *static dashed* outline in the softer ink-gray-7.
   pickerFill:   'rgba(23, 23, 23, 0.05)',   // --ink-gray-9 @ 5% — subtle wash
   pickerBorder: '#525252',                  // --ink-gray-7 — static dashed outline
+  // Data-validation dropdown chips
+  chipFill:     '#EDEDED',                  // --surface-gray-3 — neutral pill
+  chipCaret:    '#525252',                  // --ink-gray-7 — pill caret
+  invalidMark:  '#D93025',                  // red — value fails its validation rule
 }

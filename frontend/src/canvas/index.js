@@ -5,6 +5,7 @@ import { TOTAL_ROWS, TOTAL_COLS, DEFAULT_ROW_H, ROW_HEADER_W, COL_HEADER_H, setT
 import { cellId, colLabel, parseCellId } from '../utils/cells.js'
 import { AC_FUNS, AC_FUN_KEYS, parseAcToken } from '../utils/formula-ac.js'
 import { isWrapText } from '../utils/text-wrap.js'
+import { CHIP, chipMetrics } from './chip-geometry.js'
 
 export { colLabel, cellId, parseCellId } from '../utils/cells.js'
 
@@ -1011,12 +1012,22 @@ export function createGrid(canvas, { onSelect, onCommit, onInput, onCancel, getF
       return
     }
 
-    // Click on the dropdown arrow of a validated cell → open dropdown
-    if (getValidation?.(hId)) {
+    // Click on the dropdown caret of a list-validated cell → open dropdown.
+    // The caret zone tracks the chip when one is drawn (list rule + value),
+    // else it's the plain arrow box at the cell's right edge. Only list rules
+    // get a dropdown — number/length rules fall through to normal selection.
+    const vrule = getValidation?.(hId)
+    if (vrule?.type === 'list') {
       const x = geo.colX(h.c), y = geo.rowY(h.r)
       const w = geo.cw(h.c), cellRight = x + w
       const lx = (e.clientX - rect.left) / _zoom
-      if (lx >= cellRight - 14) {
+      const val = data[hId]
+      let caretL = cellRight - 14
+      if (val != null && String(val) !== '') {
+        const { offsetX, chipW } = chipMetrics(ctx, String(val), getFormat?.(hId) || {}, w)
+        caretL = x + offsetX + chipW - CHIP.caretW
+      }
+      if (lx >= caretL && lx <= cellRight) {
         e.stopPropagation()   // prevent _onDocMouseDown from closing the just-opened panel
         moveSel(h.r, h.c)
         const pos = {
@@ -1024,7 +1035,7 @@ export function createGrid(canvas, { onSelect, onCommit, onInput, onCancel, getF
           y: rect.top  + (y + geo.rh(h.r)) * _zoom,
           w: w * _zoom,
         }
-        onDropdownClick?.(hId, getValidation(hId), pos)
+        onDropdownClick?.(hId, vrule, pos)
         return
       }
     }
