@@ -1,7 +1,7 @@
 import { createGeometry } from './geometry.js'
 import { createRenderer } from './renderer.js'
 import { createOverlay }  from './overlay.js'
-import { TOTAL_ROWS, TOTAL_COLS, DEFAULT_ROW_H, ROW_HEADER_W, COL_HEADER_H, setTotalRows, setTotalCols } from './constants.js'
+import { TOTAL_ROWS, TOTAL_COLS, DEFAULT_TOTAL_ROWS, DEFAULT_TOTAL_COLS, DEFAULT_ROW_H, ROW_HEADER_W, COL_HEADER_H, setTotalRows, setTotalCols } from './constants.js'
 import { cellId, colLabel, parseCellId } from '../utils/cells.js'
 import { AC_FUNS, AC_FUN_KEYS, parseAcToken } from '../utils/formula-ac.js'
 import { isWrapText } from '../utils/text-wrap.js'
@@ -1560,8 +1560,12 @@ export function createGrid(canvas, { onSelect, onCommit, onInput, onCancel, getF
     filterHiddenRows.clear()
     hiddenCols.clear()
     for (const c of (snap.hiddenCols || [])) hiddenCols.add(c)
-    if (typeof snap.totalRows === 'number') setTotalRows(snap.totalRows)
-    if (typeof snap.totalCols === 'number') setTotalCols(snap.totalCols)
+    // Reset to the default size when the view doesn't carry an explicit count
+    // (new / pivot / drill-down sheets) — otherwise the count stays at whatever
+    // a large source sheet grew the global binding to. _repopulateGrid expands
+    // again to fit any real data right after this, so nothing gets hidden.
+    setTotalRows(typeof snap.totalRows === 'number' ? snap.totalRows : DEFAULT_TOTAL_ROWS)
+    setTotalCols(typeof snap.totalCols === 'number' ? snap.totalCols : DEFAULT_TOTAL_COLS)
     if (typeof snap.zoom === 'number')      _zoom = Math.max(0.5, Math.min(2.5, snap.zoom))
     _applyCanvasSize()
     render()
