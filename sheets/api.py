@@ -286,16 +286,20 @@ def list_sheets() -> list:
 
 
 @frappe.whitelist()
-def get_sheet(name: str) -> dict:
+def get_sheet(name: str, compressed: int = 0) -> dict:
 	# `frappe.get_doc` does NOT check read permission by itself — without
 	# this guard, any logged-in user who knows a sheet id could exfiltrate
 	# its contents.
 	frappe.has_permission("Sheet", doc=name, throw=True)
 	doc = frappe.get_doc("Sheet", name)
+	# When the client can gunzip (DecompressionStream), ship the stored envelope
+	# as-is — ~1.5MB instead of the ~20MB decoded JSON for a big sheet — and let
+	# it decompress. Clients without it (older Safari) get the decoded payload.
+	raw = doc.sheets_data
 	return {
 		"name": doc.name,
 		"title": doc.title,
-		"sheets_data": decode_sheets_data(doc.sheets_data),
+		"sheets_data": raw if frappe.utils.cint(compressed) else decode_sheets_data(raw),
 	}
 
 

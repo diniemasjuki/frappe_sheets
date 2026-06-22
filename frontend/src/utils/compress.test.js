@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { encodeForUpload, isCompressionSupported } from './compress.js'
+import { encodeForUpload, isCompressionSupported, decodeFromDownload } from './compress.js'
 
 // Round-trip helper that mirrors what the server does via storage.py.
 async function decode(envelopeJson) {
@@ -54,5 +54,26 @@ describe('encodeForUpload', () => {
 describe('isCompressionSupported', () => {
   it('reports CompressionStream availability', () => {
     expect(isCompressionSupported()).toBe(typeof CompressionStream !== 'undefined')
+  })
+})
+
+describe('decodeFromDownload', () => {
+  it('round-trips an uploaded envelope back to the original JSON', async () => {
+    const cells = {}
+    for (let i = 0; i < 3000; i++) cells[`A${i}`] = 'value ' + i + ' '.repeat(40)
+    const original = JSON.stringify(cells)            // > 64KB → actually compresses
+    const envelope = await encodeForUpload(original)
+    expect(envelope).not.toBe(original)              // actually compressed
+    expect(await decodeFromDownload(envelope)).toBe(original)
+  })
+
+  it('passes plain (legacy / already-decoded) JSON through untouched', async () => {
+    const plain = JSON.stringify({ sheet: { v: 2, sheets: {} } })
+    expect(await decodeFromDownload(plain)).toBe(plain)
+  })
+
+  it('passes empty / falsy inputs through', async () => {
+    expect(await decodeFromDownload('')).toBe('')
+    expect(await decodeFromDownload(null)).toBe(null)
   })
 })

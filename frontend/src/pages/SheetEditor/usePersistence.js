@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { call }                  from '../../utils/api.js'
-import { encodeForUpload }       from '../../utils/compress.js'
+import { encodeForUpload, isDecompressionSupported, decodeFromDownload } from '../../utils/compress.js'
 import { packSheet, packSheetChunked, unpackSheet, boundsOf } from '../../utils/sheet-codec.js'
 
 // `merge` and the view-state getters/setters are optional — they were missing
@@ -17,8 +17,10 @@ export function usePersistence({ sheet, formats, merge, comments, validation, co
   async function loadSheet(name) {
     loadError.value = null
     try {
-      const doc    = await call('sheets.api.get_sheet', { name })
-      const saved  = JSON.parse(doc.sheets_data || '{}')
+      const canGz  = isDecompressionSupported()
+      const doc    = await call('sheets.api.get_sheet', { name, compressed: canGz ? 1 : 0 })
+      const plain  = canGz ? await decodeFromDownload(doc.sheets_data) : doc.sheets_data
+      const saved  = JSON.parse(plain || '{}')
       if (saved.formats)    formats.restore(saved.formats)
       sheet.restore(
         unpackSheet(saved.sheet) ?? { sheets: { Sheet1: {} }, current: 'Sheet1' },
